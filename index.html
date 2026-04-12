@@ -1,14 +1,105 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Hello World</title>
-  <link href='/style.css' rel='stylesheet'>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hansol Recruit</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&family=Noto+Sans+KR:wght@400;500;700&display=swap">
 </head>
 <body>
-  <h1>Hello, world!</h1>
-  <button onclick="console.log('hello');">Press me</button>
-  <script defer type="text/javascript" src="/main.js"></script>
+    <header>
+        <nav>
+            <div class="logo">Hansol</div>
+            <ul>
+                <li><a href="#postings">채용공고</a></li>
+                <li><a href="#values">인재상</a></li>
+                <li><a href="#descriptions">직무소개</a></li>
+                <li><a href="#process">채용절차</a></li>
+            </ul>
+            <div class="user-actions">
+                <a href="#">My Page</a>
+            </div>
+        </nav>
+    </header>
+
+    <main>
+        <section class="hero">
+            <h1>한솔과 함께, 미래를 만들어갈 당신을 기다립니다.</h1>
+            <div class="search-bar">
+                <input type="text" placeholder="검색어를 입력하세요" id="searchInput">
+                <button id="searchButton">검색</button>
+            </div>
+        </section>
+
+        <section id="postings">
+            <job-postings></job-postings>
+        </section>
+
+        <section id="values">
+            <h2>한솔의 인재상</h2>
+            <div class="process-grid">
+                <div class="process-step">
+                    <div class="step-number">01</div>
+                    <h3>창의적 사고</h3>
+                    <p>기존의 틀에서 벗어나 새로운 시각으로 문제를 바라보고 혁신을 주도하는 인재</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">02</div>
+                    <h3>열정적 도전</h3>
+                    <p>목표를 향해 끊임없이 도전하고 어려움 속에서도 성취를 이끌어내는 인재</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">03</div>
+                    <h3>전문성</h3>
+                    <p>자신의 분야에서 최고의 역량을 갖추기 위해 끊임없이 학습하고 성장하는 인재</p>
+                </div>
+            </div>
+        </section>
+
+        <section id="descriptions" class="placeholder-section">
+            <h2>직무 소개</h2>
+            <p>제지, 소재, 건설, IT, 물류 등 다양한 산업 분야에서 당신의 역량을 펼쳐보세요.</p>
+            <div class="process-grid" style="grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));">
+                <div class="process-step"><h4>경영지원</h4></div>
+                <div class="process-step"><h4>영업/마케팅</h4></div>
+                <div class="process-step"><h4>R&D/생산</h4></div>
+                <div class="process-step"><h4>IT/디지털</h4></div>
+            </div>
+        </section>
+
+        <section id="process">
+            <h2>채용 절차</h2>
+            <div class="process-grid">
+                <div class="process-step">
+                    <div class="step-number">1</div>
+                    <h3>서류 전형</h3>
+                    <p>지원서 검토</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">2</div>
+                    <h3>인적성 검사</h3>
+                    <p>H-Standard</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">3</div>
+                    <h3>1차 면접</h3>
+                    <p>실무진 면접</p>
+                </div>
+                <div class="process-step">
+                    <div class="step-number">4</div>
+                    <h3>2차 면접</h3>
+                    <p>임원 면접</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>&copy; 2023 Hansol Group. All rights reserved.</p>
+    </footer>
+
+    <script src="main.js" type="module"></script>
 </body>
 </html>
