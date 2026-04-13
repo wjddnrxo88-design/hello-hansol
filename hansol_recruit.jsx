@@ -476,6 +476,17 @@ function ResumeAI({ stageData, onUpdate, job }) {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
+  const [showSet, setShowSet] = useState(false);
+
+  // 로컬 스토리지에서 설정 로드
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("hpns_anthropic_key") || "");
+  const [proxy, setProxy] = useState(() => localStorage.getItem("hpns_cors_proxy") || "https://cors-anywhere.herokuapp.com/");
+
+  function saveSettings() {
+    localStorage.setItem("hpns_anthropic_key", apiKey);
+    localStorage.setItem("hpns_cors_proxy", proxy);
+    setShowSet(false);
+  }
 
   function handleFile(f) {
     if (!f) return;
@@ -485,7 +496,9 @@ function ResumeAI({ stageData, onUpdate, job }) {
   }
 
   async function analyze() {
+    if (!apiKey) { alert("Anthropic API Key를 먼저 설정해주세요."); setShowSet(true); return; }
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
+    
     setLoading(true);
     try {
       const b64 = await fileToBase64(file);
@@ -506,11 +519,19 @@ function ResumeAI({ stageData, onUpdate, job }) {
   - 문체·표현 패턴·일관성을 분석해 AI가 작성했을 가능성을 높음/보통/낮음으로 평가하고 근거를 1~2줄로 설명
 ■ 담당자 참고 의견 (2문장 이내)`;
 
-      const res = await fetch("https://api.anthropic.com/v1/messages", {
+      const apiUrl = "https://api.anthropic.com/v1/messages";
+      const finalUrl = proxy ? proxy + apiUrl : apiUrl;
+
+      const res = await fetch(finalUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "anthropic-dangerous-direct-browser-access": "true"
+        },
         body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
+          model: "claude-3-5-sonnet-20240620",
           max_tokens: 1200,
           messages: [{
             role: "user",
@@ -521,17 +542,49 @@ function ResumeAI({ stageData, onUpdate, job }) {
           }],
         }),
       });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error?.message || `API 요청 실패 (${res.status})`);
+      }
+
       const json = await res.json();
       const text = json.content?.find(c => c.type === "text")?.text || "분석 결과를 가져오지 못했습니다.";
       onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
-      onUpdate({ ...stageData, aiAnalysis: "오류: " + e.message });
+      let msg = e.message;
+      if (msg.includes("Failed to fetch") && proxy) {
+        msg += "\n\n(CORS Proxy 오류일 수 있습니다. 'https://cors-anywhere.herokuapp.com/corsdemo' 에 접속하여 일시적 사용 권한을 활성화해야 할 수 있습니다.)";
+      }
+      onUpdate({ ...stageData, aiAnalysis: "오류: " + msg });
     }
     setLoading(false);
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* API 설정 버튼 */}
+      <div style={{ textAlign: "right" }}>
+        <button 
+          onClick={() => setShowSet(!showSet)}
+          style={{ background: "none", border: "none", color: PR, fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
+        >
+          {showSet ? "✕ 설정 닫기" : "⚙️ API 설정"}
+        </button>
+      </div>
+
+      {showSet && (
+        <div style={{ background: "#F1F5F9", padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
+          <TextInput label="Anthropic API Key" value={apiKey} onChange={setApiKey} placeholder="sk-ant-..." />
+          <TextInput label="CORS Proxy URL (선택)" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
+          <InfoBox warn>
+            브라우저에서 API를 직접 호출하기 위해 CORS 프록시가 필요합니다.<br/>
+            사용 전 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer">여기</a>에서 활성화가 필요할 수 있습니다.
+          </InfoBox>
+          <Button sm onClick={saveSettings}>설정 저장</Button>
+        </div>
+      )}
+
       <div
         onDragOver={e => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
