@@ -495,6 +495,29 @@ function ResumeAI({ stageData, onUpdate, job }) {
     onUpdate({ ...stageData, aiAnalysis: "", fileName: "" });
   }
 
+  // 데모 데이터를 생성하는 함수
+  function generateMockResult() {
+    setLoading(true);
+    setTimeout(() => {
+      const mock = `■ 종합 적합도: 상
+■ 요구 조건 충족 여부
+  - Node.js 경험: 충족 (이력서 내 3년 경력 확인)
+  - SQLD 보유: 충족 (자격증 항목 기재)
+  - 문서 작성 능력: 충족 (기획서 작성 사례 다수)
+■ 강점
+  - 실무 중심의 기술 스택 보유
+  - 대규모 트래픽 처리 경험 유
+■ 부족한 점
+  - 클라우드 환경(AWS/GCP) 관련 구체적 언급 부족
+■ AI 작성 가능성
+  - 낮음: 문장이 자연스럽고 본인만의 구체적인 성과 수치가 포함됨
+■ 담당자 참고 의견
+  - 기술 면접에서 클라우드 아키텍처 이해도를 중점적으로 검증할 필요가 있음. 전반적으로 직무에 매우 적합한 인재임.`;
+      onUpdate({ ...stageData, aiAnalysis: mock, aiDate: todayStr(), fileName: file?.name || "demo_resume.pdf" });
+      setLoading(false);
+    }, 1500);
+  }
+
   async function analyze() {
     if (!apiKey) { alert("Anthropic API Key를 먼저 설정해주세요."); setShowSet(true); return; }
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
@@ -520,7 +543,9 @@ function ResumeAI({ stageData, onUpdate, job }) {
 ■ 담당자 참고 의견 (2문장 이내)`;
 
       const apiUrl = "https://api.anthropic.com/v1/messages";
-      const finalUrl = proxy ? proxy + apiUrl : apiUrl;
+      // 프록시 URL 정리 (마지막에 /가 없으면 추가)
+      const cleanProxy = proxy ? (proxy.endsWith("/") ? proxy : proxy + "/") : "";
+      const finalUrl = cleanProxy + apiUrl;
 
       const res = await fetch(finalUrl, {
         method: "POST",
@@ -553,8 +578,8 @@ function ResumeAI({ stageData, onUpdate, job }) {
       onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
       let msg = e.message;
-      if (msg.includes("Failed to fetch") && proxy) {
-        msg += "\n\n(CORS Proxy 오류일 수 있습니다. 'https://cors-anywhere.herokuapp.com/corsdemo' 에 접속하여 일시적 사용 권한을 활성화해야 할 수 있습니다.)";
+      if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
+        msg = "네트워크 연결 오류 또는 CORS 차단입니다.\n\n[해결 방법]\n1. 프록시 활성화 페이지(https://cors-anywhere.herokuapp.com/corsdemo)에 접속하여 'Request temporary access' 버튼을 클릭하세요.\n2. API 키가 올바른지 확인하세요.\n3. 계속 안될 경우 '데모 데이터로 분석'을 사용해 기능을 테스트해보세요.";
       }
       onUpdate({ ...stageData, aiAnalysis: "오류: " + msg });
     }
@@ -564,7 +589,15 @@ function ResumeAI({ stageData, onUpdate, job }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {/* API 설정 버튼 */}
-      <div style={{ textAlign: "right" }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
+        {file && !loading && (
+          <button 
+            onClick={generateMockResult}
+            style={{ background: "none", border: "none", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
+          >
+            🧪 데모 데이터로 분석 테스트
+          </button>
+        )}
         <button 
           onClick={() => setShowSet(!showSet)}
           style={{ background: "none", border: "none", color: PR, fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
@@ -576,10 +609,10 @@ function ResumeAI({ stageData, onUpdate, job }) {
       {showSet && (
         <div style={{ background: "#F1F5F9", padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
           <TextInput label="Anthropic API Key" value={apiKey} onChange={setApiKey} placeholder="sk-ant-..." />
-          <TextInput label="CORS Proxy URL (선택)" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
+          <TextInput label="CORS Proxy URL" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
           <InfoBox warn>
-            브라우저에서 API를 직접 호출하기 위해 CORS 프록시가 필요합니다.<br/>
-            사용 전 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer">여기</a>에서 활성화가 필요할 수 있습니다.
+            <b>CORS 프록시 활성화 필요</b><br/>
+            사용 전 반드시 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer" style={{ color: "#B45309", fontWeight: 800 }}>여기(활성화 페이지)</a>에서 버튼을 눌러주셔야 합니다.
           </InfoBox>
           <Button sm onClick={saveSettings}>설정 저장</Button>
         </div>
@@ -612,10 +645,10 @@ function ResumeAI({ stageData, onUpdate, job }) {
       {stageData.aiAnalysis && (
         <div style={{ background: "#EBF3FF", border: "1px solid #BFDBFE", borderRadius: 9, padding: 14 }}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: PR }}>🤖 AI 분석 결과</span>
-            <span style={{ fontSize: 11, color: "#94A3B8" }}>분석일: {stageData.aiDate}</span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: PR }}>🤖 분석 결과</span>
+            <span style={{ fontSize: 11, color: "#94A3B8" }}>{stageData.aiDate}</span>
           </div>
-          <pre style={{ fontSize: 12.5, whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.8, color: TEXT }}>
+          <pre style={{ fontSize: 12.5, whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.8, color: TEXT, fontFamily: "inherit" }}>
             {stageData.aiAnalysis}
           </pre>
         </div>
