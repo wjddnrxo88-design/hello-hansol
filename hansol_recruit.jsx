@@ -1322,7 +1322,7 @@ function Dashboard({ jobs, cands, onCandClick }) {
       <h2 style={{ margin: "0 0 22px", fontSize: 20, fontWeight: 800, color: TEXT }}>채용 현황 대시보드</h2>
 
       {/* KPI 카드 */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 14, marginBottom: 26 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14, marginBottom: 26 }}>
         {kpis.map(k => (
           <div key={k.label} style={{ background: k.grad, borderRadius: 16, padding: "22px 24px", boxShadow: "0 4px 20px rgba(0,0,0,.12)" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>{k.icon}</div>
@@ -1335,7 +1335,7 @@ function Dashboard({ jobs, cands, onCandClick }) {
       {/* 단계별 가로 카드 */}
       <Card style={{ marginBottom: 18 }}>
         <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 800, color: TEXT }}>📈 단계별 진행 현황</h3>
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: 8, paddingBottom: 4 }}>
           {STAGES.map(stg => {
             const ppl     = byStage[stg.key] || [];
             const isHov   = hovStage === stg.key;
@@ -1343,7 +1343,7 @@ function Dashboard({ jobs, cands, onCandClick }) {
             return (
               <div
                 key={stg.key}
-                style={{ position: "relative", minWidth: 100, flexShrink: 0 }}
+                style={{ position: "relative" }}
                 onMouseEnter={() => setHovStage(stg.key)}
                 onMouseLeave={() => setHovStage(null)}
               >
@@ -1391,7 +1391,7 @@ function Dashboard({ jobs, cands, onCandClick }) {
       </Card>
 
       {/* 하단 2열 */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(350px, 1fr))", gap: 16 }}>
         <Card>
           <h3 style={{ margin: "0 0 14px", fontSize: 15, fontWeight: 800, color: TEXT }}>📅 2주 내 입사 예정</h3>
           {upcoming.length === 0
