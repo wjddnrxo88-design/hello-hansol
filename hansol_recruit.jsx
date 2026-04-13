@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+// 브라우저 직접 실행 환경을 위해 React 훅을 가져옵니다.
+const { useState, useEffect } = React;
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 const PR  = "#1B6FDB";
@@ -149,7 +150,7 @@ function getSubStatus(key, stageData) {
     return null;
   }
   if (key === "education") {
-    if (d.result === "완료")                                return { text: "입사 완료 ", color: GREEN };
+    if (d.result === "완료")                                return { text: "입사 완료 🎉", color: GREEN };
     if ((d.completed || {})["공통 입사 교육"])              return { text: "교육 이수 완료", color: AMBER };
     return null;
   }
@@ -1560,7 +1561,7 @@ function CandModal({ jobs, preJobId, onSave, onClose }) {
 }
 
 // ── 메인 앱 ───────────────────────────────────────────────────────────────────
-export default function App() {
+function App() {
   function loadLS(key) {
     try { return JSON.parse(localStorage.getItem(key) || "[]"); } catch { return []; }
   }
@@ -1866,3 +1867,7 @@ export default function App() {
     </div>
   );
 }
+
+// 렌더링 코드 추가
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
