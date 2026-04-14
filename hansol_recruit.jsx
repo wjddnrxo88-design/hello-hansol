@@ -479,11 +479,11 @@ function ResumeAI({ stageData, onUpdate, job }) {
   const [showSet, setShowSet] = useState(false);
 
   // 로컬 스토리지에서 설정 로드
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("hpns_anthropic_key") || "");
-  const [proxy, setProxy] = useState(() => localStorage.getItem("hpns_cors_proxy") || "https://cors-anywhere.herokuapp.com/");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("hpns_gemini_key") || "");
+  const [proxy, setProxy] = useState(() => localStorage.getItem("hpns_cors_proxy") || "");
 
   function saveSettings() {
-    localStorage.setItem("hpns_anthropic_key", apiKey);
+    localStorage.setItem("hpns_gemini_key", apiKey);
     localStorage.setItem("hpns_cors_proxy", proxy);
     setShowSet(false);
   }
@@ -519,7 +519,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
   }
 
   async function analyze() {
-    if (!apiKey) { alert("Anthropic API Key를 먼저 설정해주세요."); setShowSet(true); return; }
+    if (!apiKey) { alert("Google API Key를 먼저 설정해주세요."); setShowSet(true); return; }
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
     
     setLoading(true);
@@ -542,29 +542,20 @@ function ResumeAI({ stageData, onUpdate, job }) {
   - 문체·표현 패턴·일관성을 분석해 AI가 작성했을 가능성을 높음/보통/낮음으로 평가하고 근거를 1~2줄로 설명
 ■ 담당자 참고 의견 (2문장 이내)`;
 
-      const apiUrl = "https://api.anthropic.com/v1/messages";
-      // 프록시 URL 정리 (마지막에 /가 없으면 추가)
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const cleanProxy = proxy ? (proxy.endsWith("/") ? proxy : proxy + "/") : "";
       const finalUrl = cleanProxy + apiUrl;
 
       const res = await fetch(finalUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          model: "claude-3-5-sonnet-20240620",
-          max_tokens: 1200,
-          messages: [{
-            role: "user",
-            content: [
-              { type: "document", source: { type: "base64", media_type: "application/pdf", data: b64 } },
-              { type: "text",     text: prompt },
-            ],
-          }],
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: "application/pdf", data: b64 } }
+            ]
+          }]
         }),
       });
 
@@ -574,12 +565,12 @@ function ResumeAI({ stageData, onUpdate, job }) {
       }
 
       const json = await res.json();
-      const text = json.content?.find(c => c.type === "text")?.text || "분석 결과를 가져오지 못했습니다.";
+      const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 가져오지 못했습니다.";
       onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
       let msg = e.message;
       if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        msg = "네트워크 연결 오류 또는 CORS 차단입니다.\n\n[해결 방법]\n1. 프록시 활성화 페이지(https://cors-anywhere.herokuapp.com/corsdemo)에 접속하여 'Request temporary access' 버튼을 클릭하세요.\n2. API 키가 올바른지 확인하세요.\n3. 계속 안될 경우 '데모 데이터로 분석'을 사용해 기능을 테스트해보세요.";
+        msg = "네트워크 연결 오류 또는 CORS 차단입니다.\n\n[해결 방법]\n1. 브라우저에서 직접 API를 호출할 때 보안 정책으로 차단될 수 있습니다. CORS 프록시를 설정하거나 서버 환경에서 실행하세요.\n2. API 키가 올바른지 확인하세요.";
       }
       onUpdate({ ...stageData, aiAnalysis: "오류: " + msg });
     }
@@ -608,11 +599,11 @@ function ResumeAI({ stageData, onUpdate, job }) {
 
       {showSet && (
         <div style={{ background: "#F1F5F9", padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
-          <TextInput label="Anthropic API Key" value={apiKey} onChange={setApiKey} placeholder="sk-ant-..." />
-          <TextInput label="CORS Proxy URL" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
+          <TextInput label="Google Gemini API Key" value={apiKey} onChange={setApiKey} placeholder="AIzaSy..." />
+          <TextInput label="CORS Proxy URL (선택)" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
           <InfoBox warn>
-            <b>CORS 프록시 활성화 필요</b><br/>
-            사용 전 반드시 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer" style={{ color: "#B45309", fontWeight: 800 }}>여기(활성화 페이지)</a>에서 버튼을 눌러주셔야 합니다.
+            <b>CORS 프록시 관련 안내</b><br/>
+            로컬 브라우저 환경에서 직접 Google API 호출 시 CORS 오류가 발생할 수 있습니다. 프록시 사용 시 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer" style={{ color: "#B45309", fontWeight: 800 }}>여기</a>에서 일시적 허용이 필요할 수 있습니다.
           </InfoBox>
           <Button sm onClick={saveSettings}>설정 저장</Button>
         </div>
@@ -639,7 +630,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
       </div>
 
       <Button onClick={analyze} disabled={loading || !file}>
-        {loading ? "⏳ AI 분석 중..." : "🤖 Claude AI 서류 적합도 분석"}
+        {loading ? "⏳ AI 분석 중..." : "🤖 Gemini AI 서류 적합도 분석"}
       </Button>
 
       {stageData.aiAnalysis && (
