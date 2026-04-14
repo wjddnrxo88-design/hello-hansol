@@ -542,7 +542,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
   - 문체·표현 패턴·일관성을 분석해 AI가 작성했을 가능성을 높음/보통/낮음으로 평가하고 근거를 1~2줄로 설명
 ■ 담당자 참고 의견 (2문장 이내)`;
 
-      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
       const cleanProxy = proxy ? (proxy.endsWith("/") ? proxy : proxy + "/") : "";
       const finalUrl = cleanProxy + apiUrl;
 
