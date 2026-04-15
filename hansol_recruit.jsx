@@ -1,6 +1,11 @@
 // 브라우저 직접 실행 환경을 위해 React 훅을 가져옵니다.
 const { useState, useEffect } = React;
 
+// ── Cloudflare Worker URL ────────────────────────────────────────────────────
+// 배포 후 실제 Worker URL로 변경하세요.
+// 예: "https://hansol-recruit-api.your-subdomain.workers.dev"
+const WORKER_URL = "https://hansol-recruit-api.wjddnrxo88.workers.dev";
+
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 const PR  = "#1B6FDB";
 const PRD = "#1251AD";
@@ -476,17 +481,6 @@ function ResumeAI({ stageData, onUpdate, job }) {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
-  const [showSet, setShowSet] = useState(false);
-
-  // 로컬 스토리지에서 설정 로드
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("hpns_gemini_key") || "");
-  const [proxy, setProxy] = useState(() => localStorage.getItem("hpns_cors_proxy") || "");
-
-  function saveSettings() {
-    localStorage.setItem("hpns_gemini_key", apiKey);
-    localStorage.setItem("hpns_cors_proxy", proxy);
-    setShowSet(false);
-  }
 
   function handleFile(f) {
     if (!f) return;
@@ -519,9 +513,8 @@ function ResumeAI({ stageData, onUpdate, job }) {
   }
 
   async function analyze() {
-    if (!apiKey) { alert("Google API Key를 먼저 설정해주세요."); setShowSet(true); return; }
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
-    
+
     setLoading(true);
     try {
       const b64 = await fileToBase64(file);
@@ -542,11 +535,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
   - 문체·표현 패턴·일관성을 분석해 AI가 작성했을 가능성을 높음/보통/낮음으로 평가하고 근거를 1~2줄로 설명
 ■ 담당자 참고 의견 (2문장 이내)`;
 
-      const apiUrl = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-      const cleanProxy = proxy ? (proxy.endsWith("/") ? proxy : proxy + "/") : "";
-      const finalUrl = cleanProxy + apiUrl;
-
-      const res = await fetch(finalUrl, {
+      const res = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -568,44 +557,22 @@ function ResumeAI({ stageData, onUpdate, job }) {
       const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 가져오지 못했습니다.";
       onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
-      let msg = e.message;
-      if (msg.includes("Failed to fetch") || msg.includes("NetworkError")) {
-        msg = "네트워크 연결 오류 또는 CORS 차단입니다.\n\n[해결 방법]\n1. 브라우저에서 직접 API를 호출할 때 보안 정책으로 차단될 수 있습니다. CORS 프록시를 설정하거나 서버 환경에서 실행하세요.\n2. API 키가 올바른지 확인하세요.";
-      }
-      onUpdate({ ...stageData, aiAnalysis: "오류: " + msg });
+      onUpdate({ ...stageData, aiAnalysis: "오류: " + e.message });
     }
     setLoading(false);
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* API 설정 버튼 */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        {file && !loading && (
-          <button 
+      {/* 데모 테스트 버튼 */}
+      {file && !loading && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
             onClick={generateMockResult}
             style={{ background: "none", border: "none", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
           >
             🧪 데모 데이터로 분석 테스트
           </button>
-        )}
-        <button 
-          onClick={() => setShowSet(!showSet)}
-          style={{ background: "none", border: "none", color: PR, fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}
-        >
-          {showSet ? "✕ 설정 닫기" : "⚙️ API 설정"}
-        </button>
-      </div>
-
-      {showSet && (
-        <div style={{ background: "#F1F5F9", padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
-          <TextInput label="Google Gemini API Key" value={apiKey} onChange={setApiKey} placeholder="AIzaSy..." />
-          <TextInput label="CORS Proxy URL (선택)" value={proxy} onChange={setProxy} placeholder="https://cors-anywhere.herokuapp.com/" />
-          <InfoBox warn>
-            <b>CORS 프록시 관련 안내</b><br/>
-            로컬 브라우저 환경에서 직접 Google API 호출 시 CORS 오류가 발생할 수 있습니다. 프록시 사용 시 <a href="https://cors-anywhere.herokuapp.com/corsdemo" target="_blank" rel="noreferrer" style={{ color: "#B45309", fontWeight: 800 }}>여기</a>에서 일시적 허용이 필요할 수 있습니다.
-          </InfoBox>
-          <Button sm onClick={saveSettings}>설정 저장</Button>
         </div>
       )}
 
