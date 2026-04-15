@@ -515,13 +515,37 @@ function ResumeAI({ stageData, onUpdate, job }) {
   async function extractPdfText(pdfFile) {
     const arrayBuffer = await pdfFile.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    let text = "";
+    let fullText = "";
+
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const content = await page.getTextContent();
-      text += content.items.map(item => item.str).join(" ") + "\n";
+
+      // Y좌표 기준으로 줄 묶기 (같은 줄 = Y값 차이 2 이내)
+      const lines = [];
+      let currentLine = [];
+      let lastY = null;
+
+      const sorted = [...content.items].sort((a, b) => {
+        const yDiff = b.transform[5] - a.transform[5];
+        return Math.abs(yDiff) > 2 ? yDiff : a.transform[4] - b.transform[4];
+      });
+
+      for (const item of sorted) {
+        const y = item.transform[5];
+        if (lastY === null || Math.abs(y - lastY) > 2) {
+          if (currentLine.length) lines.push(currentLine.map(t => t.str).join(" "));
+          currentLine = [item];
+          lastY = y;
+        } else {
+          currentLine.push(item);
+        }
+      }
+      if (currentLine.length) lines.push(currentLine.map(t => t.str).join(" "));
+
+      fullText += lines.join("\n") + "\n\n";
     }
-    return text.trim();
+    return fullText.trim();
   }
 
   async function analyze() {
