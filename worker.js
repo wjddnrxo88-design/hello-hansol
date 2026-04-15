@@ -1,14 +1,14 @@
 /**
- * Cloudflare Worker - Gemini API Proxy
- * Secret 설정: wrangler secret put GEMINI_API_KEY
+ * Cloudflare Worker - Groq API Proxy
+ * Secret 설정: wrangler secret put GROQ_API_KEY
  */
 
-const GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
-const ALLOWED_ORIGIN = "*"; // 배포 후 실제 도메인으로 변경 권장 (예: "https://hansol-recruit.pages.dev")
+const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+const ALLOWED_ORIGIN = "*";
 
 export default {
   async fetch(request, env) {
-    // CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, {
         headers: {
@@ -23,30 +23,40 @@ export default {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
-    if (!env.GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: { message: "서버에 GEMINI_API_KEY Secret이 설정되지 않았습니다." } }), {
+    if (!env.GROQ_API_KEY) {
+      return new Response(JSON.stringify({ error: { message: "서버에 GROQ_API_KEY Secret이 설정되지 않았습니다." } }), {
         status: 500,
         headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ALLOWED_ORIGIN },
       });
     }
 
     try {
-      const body = await request.json();
+      const { prompt, resumeText } = await request.json();
 
-      const geminiRes = await fetch(`${GEMINI_URL}?key=${env.GEMINI_API_KEY}`, {
+      const groqRes = await fetch(GROQ_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      const data = await geminiRes.json();
-
-      return new Response(JSON.stringify(data), {
-        status: geminiRes.status,
         headers: {
           "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": ALLOWED_ORIGIN,
+          "Authorization": `Bearer ${env.GROQ_API_KEY}`,
         },
+        body: JSON.stringify({
+          model: GROQ_MODEL,
+          messages: [
+            { role: "user", content: `${prompt}\n\n[이력서 내용]\n${resumeText}` }
+          ],
+          max_tokens: 1024,
+        }),
+      });
+
+      const data = await groqRes.json();
+
+      if (!groqRes.ok) {
+        throw new Error(data.error?.message || `Groq API 오류 (${groqRes.status})`);
+      }
+
+      const text = data.choices?.[0]?.message?.content || "분석 결과를 가져오지 못했습니다.";
+      return new Response(JSON.stringify({ text }), {
+        headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ALLOWED_ORIGIN },
       });
     } catch (e) {
       return new Response(JSON.stringify({ error: { message: e.message } }), {

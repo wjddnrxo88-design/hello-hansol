@@ -512,13 +512,27 @@ function ResumeAI({ stageData, onUpdate, job }) {
     }, 1500);
   }
 
+  async function extractPdfText(pdfFile) {
+    const arrayBuffer = await pdfFile.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let text = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      text += content.items.map(item => item.str).join(" ") + "\n";
+    }
+    return text.trim();
+  }
+
   async function analyze() {
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
 
     setLoading(true);
     try {
-      const b64 = await fileToBase64(file);
-      const prompt = `당신은 IT 기업의 전문 채용 담당자입니다. 첨부된 이력서 PDF와 아래 채용 공고를 비교 분석하여 서류 적합도를 평가해주세요.
+      const resumeText = await extractPdfText(file);
+      if (!resumeText) throw new Error("PDF에서 텍스트를 추출하지 못했습니다. 스캔 이미지 PDF는 지원되지 않습니다.");
+
+      const prompt = `당신은 IT 기업의 전문 채용 담당자입니다. 아래 이력서와 채용 공고를 비교 분석하여 서류 적합도를 평가해주세요.
 
 [채용 공고]
 직무: ${job?.title || "(미입력)"} / 직군: ${job?.jobType || "(미입력)"}
@@ -538,24 +552,13 @@ function ResumeAI({ stageData, onUpdate, job }) {
       const res = await fetch(WORKER_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: "application/pdf", data: b64 } }
-            ]
-          }]
-        }),
+        body: JSON.stringify({ prompt, resumeText }),
       });
 
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.error?.message || `API 요청 실패 (${res.status})`);
-      }
-
       const json = await res.json();
-      const text = json.candidates?.[0]?.content?.parts?.[0]?.text || "분석 결과를 가져오지 못했습니다.";
-      onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
+      if (!res.ok) throw new Error(json.error?.message || `API 요청 실패 (${res.status})`);
+
+      onUpdate({ ...stageData, aiAnalysis: json.text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
       onUpdate({ ...stageData, aiAnalysis: "오류: " + e.message });
     }
