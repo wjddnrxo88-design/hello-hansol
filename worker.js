@@ -51,7 +51,7 @@ export default {
       const data = await groqRes.json();
 
       if (!groqRes.ok) {
-        throw new Error(data.error?.message || `Groq API 오류 (${groqRes.status})`);
+        throw new Error(`Groq ${groqRes.status}: ${JSON.stringify(data).slice(0, 300)}`);
       }
 
       const text = data.choices?.[0]?.message?.content || "분석 결과를 가져오지 못했습니다.";
