@@ -529,7 +529,12 @@ function ResumeAI({ stageData, onUpdate, job }) {
 
     setLoading(true);
     try {
-      const resumeText = await extractPdfText(file);
+      let resumeText;
+      try {
+        resumeText = await extractPdfText(file);
+      } catch (pdfErr) {
+        throw new Error("PDF 텍스트 추출 실패: " + pdfErr.message);
+      }
       if (!resumeText) throw new Error("PDF에서 텍스트를 추출하지 못했습니다. 스캔 이미지 PDF는 지원되지 않습니다.");
 
       const prompt = `당신은 IT 기업의 전문 채용 담당자입니다. 아래 이력서와 채용 공고를 비교 분석하여 서류 적합도를 평가해주세요.
@@ -549,13 +554,20 @@ function ResumeAI({ stageData, onUpdate, job }) {
   - 문체·표현 패턴·일관성을 분석해 AI가 작성했을 가능성을 높음/보통/낮음으로 평가하고 근거를 1~2줄로 설명
 ■ 담당자 참고 의견 (2문장 이내)`;
 
-      const res = await fetch(WORKER_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, resumeText }),
-      });
+      let res;
+      try {
+        res = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, resumeText }),
+        });
+      } catch (fetchErr) {
+        throw new Error("Worker 연결 실패: " + fetchErr.message);
+      }
 
-      const json = await res.json();
+      const resText = await res.text();
+      let json;
+      try { json = JSON.parse(resText); } catch { throw new Error(`응답 파싱 실패 (${res.status}): ${resText.slice(0, 100)}`); }
       if (!res.ok) throw new Error(json.error?.message || `API 요청 실패 (${res.status})`);
 
       onUpdate({ ...stageData, aiAnalysis: json.text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
