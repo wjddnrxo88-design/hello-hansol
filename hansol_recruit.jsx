@@ -1,9 +1,8 @@
 // 브라우저 직접 실행 환경을 위해 React 훅을 가져옵니다.
 const { useState, useEffect } = React;
 
-// ── Groq API ─────────────────────────────────────────────────────────────────
-const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
-const GROQ_MODEL = "llama-3.3-70b-versatile";
+// ── Cloudflare Worker URL ────────────────────────────────────────────────────
+const WORKER_URL = "https://hansol-recruit-api.wjddnrxo88.workers.dev";
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 const PR  = "#1B6FDB";
@@ -480,13 +479,6 @@ function ResumeAI({ stageData, onUpdate, job }) {
   const [loading, setLoading] = useState(false);
   const [file, setFile] = useState(null);
   const [dragging, setDragging] = useState(false);
-  const [showSet, setShowSet] = useState(false);
-  const [groqKey, setGroqKey] = useState(() => localStorage.getItem("hpns_groq_key") || "");
-
-  function saveSettings() {
-    localStorage.setItem("hpns_groq_key", groqKey);
-    setShowSet(false);
-  }
 
   function handleFile(f) {
     if (!f) return;
@@ -555,8 +547,6 @@ function ResumeAI({ stageData, onUpdate, job }) {
   }
 
   async function analyze() {
-    const apiKey = localStorage.getItem("hpns_groq_key");
-    if (!apiKey) { alert("Groq API Key를 먼저 설정해주세요."); setShowSet(true); return; }
     if (!file) { alert("PDF 파일을 먼저 선택해주세요."); return; }
 
     setLoading(true);
@@ -603,20 +593,13 @@ function ResumeAI({ stageData, onUpdate, job }) {
 
       let res;
       try {
-        res = await fetch(GROQ_URL, {
+        res = await fetch(WORKER_URL, {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({
-            model: GROQ_MODEL,
-            messages: [{ role: "user", content: `${prompt}\n\n[이력서 내용]\n${resumeText}` }],
-            max_tokens: 1024,
-          }),
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, resumeText }),
         });
       } catch (fetchErr) {
-        throw new Error("Groq 연결 실패: " + fetchErr.message);
+        throw new Error("Worker 연결 실패: " + fetchErr.message);
       }
 
       const resText = await res.text();
@@ -624,7 +607,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
       try { json = JSON.parse(resText); } catch { throw new Error(`응답 파싱 실패 (${res.status}): ${resText.slice(0, 200)}`); }
       if (!res.ok) throw new Error(`[${res.status}] ${json.error?.message || resText.slice(0, 200)}`);
 
-      const text = json.choices?.[0]?.message?.content || "분석 결과를 가져오지 못했습니다.";
+      const text = json.text || "분석 결과를 가져오지 못했습니다.";
       onUpdate({ ...stageData, aiAnalysis: text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
       onUpdate({ ...stageData, aiAnalysis: "오류: " + e.message });
@@ -634,25 +617,12 @@ function ResumeAI({ stageData, onUpdate, job }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-      {/* API 설정 버튼 */}
-      <div style={{ display: "flex", justifyContent: "flex-end", gap: 10 }}>
-        {file && !loading && (
+      {/* 데모 테스트 버튼 */}
+      {file && !loading && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
           <button onClick={generateMockResult} style={{ background: "none", border: "none", color: "#64748B", fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
             🧪 데모 데이터로 분석 테스트
           </button>
-        )}
-        <button onClick={() => setShowSet(!showSet)} style={{ background: "none", border: "none", color: PR, fontSize: 11, fontWeight: 700, cursor: "pointer", textDecoration: "underline" }}>
-          {showSet ? "✕ 설정 닫기" : "⚙️ API 설정"}
-        </button>
-      </div>
-      {showSet && (
-        <div style={{ background: "#F1F5F9", padding: 14, borderRadius: 10, border: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", gap: 8 }}>
-          <TextInput label="Groq API Key" value={groqKey} onChange={setGroqKey} placeholder="gsk_..." />
-          <InfoBox>
-            <b>Groq API Key 발급</b><br/>
-            <a href="https://console.groq.com/keys" target="_blank" rel="noreferrer" style={{ color: PR, fontWeight: 700 }}>console.groq.com/keys</a>에서 무료로 발급받을 수 있습니다. 키는 이 브라우저에만 저장됩니다.
-          </InfoBox>
-          <Button sm onClick={saveSettings}>설정 저장</Button>
         </div>
       )}
 

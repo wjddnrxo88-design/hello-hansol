@@ -2,6 +2,5 @@ name = "hansol-recruit-api"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
-# 배포 후 실제 도메인 라우팅 설정 (선택)
-# [env.production]
-# routes = [{ pattern = "hansol-recruit.pages.dev/api/*", zone_name = "pages.dev" }]
+[ai]
+binding = "AI"
