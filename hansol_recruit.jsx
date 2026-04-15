@@ -606,8 +606,8 @@ function ResumeAI({ stageData, onUpdate, job }) {
 
       const resText = await res.text();
       let json;
-      try { json = JSON.parse(resText); } catch { throw new Error(`응답 파싱 실패 (${res.status}): ${resText.slice(0, 100)}`); }
-      if (!res.ok) throw new Error(json.error?.message || `API 요청 실패 (${res.status})`);
+      try { json = JSON.parse(resText); } catch { throw new Error(`응답 파싱 실패 (${res.status}): ${resText.slice(0, 200)}`); }
+      if (!res.ok) throw new Error(`[${res.status}] ${json.error?.message || resText.slice(0, 200)}`);
 
       onUpdate({ ...stageData, aiAnalysis: json.text, aiDate: new Date().toISOString().slice(0, 10), fileName: file.name });
     } catch (e) {
