@@ -71,6 +71,52 @@ function fileToBase64(file) {
     reader.readAsDataURL(file);
   });
 }
+
+// ── PDF 텍스트 추출 유틸 ──────────────────────────────────────────────────────
+async function extractPdfText(pdfFile) {
+  const arrayBuffer = await pdfFile.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  let fullText = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const sorted = [...content.items].sort((a, b) => {
+      const yDiff = b.transform[5] - a.transform[5];
+      return Math.abs(yDiff) > 2 ? yDiff : a.transform[4] - b.transform[4];
+    });
+    let lastY = null;
+    let pageText = "";
+    for (const item of sorted) {
+      const y = item.transform[5];
+      if (lastY !== null && Math.abs(y - lastY) > 2) pageText += "\n";
+      pageText += item.str + " ";
+      lastY = y;
+    }
+    fullText += pageText + "\n\n";
+  }
+  return fullText.trim();
+}
+
+// ── AI 정보 추출 유틸 ─────────────────────────────────────────────────────────
+async function aiParseInfo(text, mode = "parse_applicant") {
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt: text, mode }),
+    });
+    const json = await res.json();
+    // JSON 문자열만 추출 (배열 또는 객체 지원)
+    const match = json.text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
+    if (match) return JSON.parse(match[0]);
+    return null;
+  } catch (e) {
+    console.error("AI Parsing Error:", e);
+    return null;
+  }
+}
+
 function checkFields(rules) {
   const missing = rules.filter(r => !r.val);
   if (missing.length > 0) {
@@ -474,6 +520,119 @@ function PrivacyBlock({ regDate, opt, onOpt, val }) {
   );
 }
 
+// ── AI 분석 결과 카드 ─────────────────────────────────────────────────────────
+function AnalysisResultCard({ raw, date }) {
+  let data = null;
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (jsonMatch) data = JSON.parse(jsonMatch[0]);
+  } catch {}
+
+  const gradeColor = { "최상": "#16A34A", "상": "#1B6FDB", "중": "#D97706", "하": "#DC2626" };
+  const gradeBg   = { "최상": "#DCFCE7", "상": "#EEF4FF", "중": "#FEF9C3", "하": "#FEE2E2" };
+
+  if (!data) {
+    return (
+      <div style={{ background: "#EBF3FF", border: "1px solid #BFDBFE", borderRadius: 9, padding: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, fontWeight: 800, color: PR }}>🤖 분석 결과</span>
+          <span style={{ fontSize: 11, color: "#94A3B8" }}>{date}</span>
+        </div>
+        <pre style={{ fontSize: 12.5, whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.8, color: TEXT, fontFamily: "inherit" }}>{raw}</pre>
+      </div>
+    );
+  }
+
+  const gc = gradeColor[data.grade] || "#64748B";
+  const gb = gradeBg[data.grade]   || "#F1F5F9";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      {/* 등급 뱃지 */}
+      <div style={{ background: gb, border: `2px solid ${gc}`, borderRadius: 12, padding: "14px 18px", display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ background: gc, color: "#fff", fontWeight: 900, fontSize: 22, borderRadius: 8, padding: "6px 18px", letterSpacing: 2 }}>
+          {data.grade}
+        </div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: gc, marginBottom: 3 }}>종합 적합도 판정</div>
+          <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.6 }}>{data.gradeReason}</div>
+        </div>
+        <div style={{ fontSize: 10, color: "#94A3B8", alignSelf: "flex-start" }}>{date}</div>
+      </div>
+
+      {/* 자격요건 체크리스트 */}
+      {data.requirements?.length > 0 && (
+        <div style={{ background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 10 }}>📋 자격 요건 충족 여부</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+            {data.requirements.map((r, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "7px 10px", background: r.met ? "#F0FDF4" : "#FFF1F2", borderRadius: 7, border: `1px solid ${r.met ? "#BBF7D0" : "#FECDD3"}` }}>
+                <span style={{ fontSize: 15, flexShrink: 0, marginTop: 1 }}>{r.met ? "✅" : "❌"}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: r.met ? "#15803D" : "#BE123C" }}>{r.item}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{r.evidence}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: MUTED, textAlign: "right" }}>
+            충족 {data.requirements.filter(r => r.met).length} / 전체 {data.requirements.length}개
+          </div>
+        </div>
+      )}
+
+      {/* 우대사항 */}
+      {data.preferred?.length > 0 && (
+        <div style={{ background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 10 }}>⭐ 우대 사항</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {data.preferred.map((p, i) => (
+              <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", padding: "6px 10px", background: p.met ? "#EFF6FF" : "#F8FAFC", borderRadius: 7, border: `1px solid ${p.met ? "#BFDBFE" : BORDER}` }}>
+                <span style={{ fontSize: 14, flexShrink: 0 }}>{p.met ? "🔵" : "⚪"}</span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: p.met ? PR : MUTED }}>{p.item}</div>
+                  <div style={{ fontSize: 11, color: MUTED, marginTop: 2 }}>{p.evidence}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 실무 투입 가능성 */}
+      {data.readiness && (
+        <div style={{ background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: TEXT, marginBottom: 6 }}>🚀 실무 투입 가능성</div>
+          <div style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.7 }}>{data.readiness}</div>
+        </div>
+      )}
+
+      {/* 면접 질문 */}
+      {data.interviewQuestions?.length > 0 && (
+        <div style={{ background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 10, padding: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 800, color: "#92400E", marginBottom: 10 }}>💬 면접 체크포인트 (권장 질문)</div>
+          <ol style={{ margin: 0, paddingLeft: 18, display: "flex", flexDirection: "column", gap: 8 }}>
+            {data.interviewQuestions.map((q, i) => (
+              <li key={i} style={{ fontSize: 12.5, color: TEXT, lineHeight: 1.6 }}>{q}</li>
+            ))}
+          </ol>
+        </div>
+      )}
+
+      {/* AI 작성 가능성 */}
+      {data.aiWritten && (
+        <div style={{ background: "#F8FAFC", border: `1px solid ${BORDER}`, borderRadius: 10, padding: 14, display: "flex", gap: 10, alignItems: "flex-start" }}>
+          <div>
+            <span style={{ fontSize: 11, fontWeight: 700, color: MUTED }}>🤖 AI 작성 가능성: </span>
+            <span style={{ fontSize: 12, fontWeight: 800, color: data.aiWritten === "높음" ? "#DC2626" : data.aiWritten === "보통" ? "#D97706" : "#16A34A" }}>{data.aiWritten}</span>
+          </div>
+          <div style={{ fontSize: 11, color: MUTED, flex: 1 }}>{data.aiWrittenReason}</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── PDF 업로드 + AI 분석 ──────────────────────────────────────────────────────
 function ResumeAI({ stageData, onUpdate, job }) {
   const [loading, setLoading] = useState(false);
@@ -559,37 +718,47 @@ function ResumeAI({ stageData, onUpdate, job }) {
       }
       if (!resumeText) throw new Error("PDF에서 텍스트를 추출하지 못했습니다. 스캔 이미지 PDF는 지원되지 않습니다.");
 
-      const prompt = `당신은 IT 기업의 경력 10년차 채용 담당자입니다.
-아래 [채용 공고]의 자격 요건과 우대 사항을 기준으로, [이력서]를 항목별로 면밀히 대조 분석하세요.
-이력서에 명시된 내용만을 근거로 판단하고, 언급되지 않은 항목은 "미확인"으로 표기하세요.
+      if (!job?.requirements || job.requirements.trim() === "") {
+        alert("이 공고에 자격 요건이 등록되어 있지 않아 AI 분석을 할 수 없습니다.\n공고 수정에서 자격 요건을 먼저 입력해주세요.");
+        setLoading(false);
+        return;
+      }
+
+      const reqItems = job.requirements.split(/[ㆍ\n]/).map(s => s.trim()).filter(Boolean);
+      const prefItems = (job.preferredSkills || "").split(/[ㆍ\n]/).map(s => s.trim()).filter(Boolean);
+
+      const prompt = `당신은 경력직 채용 심사관입니다. 이력서를 분석하고 아래 JSON 형식으로만 응답하세요. JSON 외 다른 텍스트는 출력하지 마세요.
 
 [채용 공고]
-직무: ${job?.title || "(미입력)"}
-직군: ${job?.jobType || "(미입력)"}
-자격 요건: ${job?.requirements || "(미입력)"}
-우대 사항: ${job?.preferredSkills || "(없음)"}
+직무: ${job?.title || ""}
+자격 요건 (총 ${reqItems.length}개):
+${reqItems.map((r, i) => `${i + 1}. ${r}`).join("\n")}
+우대 사항 (총 ${prefItems.length}개):
+${prefItems.length ? prefItems.map((r, i) => `${i + 1}. ${r}`).join("\n") : "없음"}
 
-아래 형식으로 반드시 한국어로 작성하세요:
+[판정 규칙]
+- 이력서에 명시되지 않은 항목은 반드시 met:false
+- 추측 금지, 이력서 원문 근거만 사용
+- requirements 중 met:false가 1개라도 있으면 grade는 반드시 "하"
+- 모두 met:true이고 preferred met:true가 3개↑ → "최상"
+- 모두 met:true이고 preferred met:true가 1~2개 → "상"
+- 모두 met:true이고 preferred met:true가 0개 → "중"
 
-■ 종합 적합도: 상 / 중 / 하
-  - 판단 근거를 1~2문장으로 설명
-
-■ 자격 요건 항목별 충족 여부
-  (자격 요건의 각 항목을 나열하고 이력서 기반으로 충족/미충족/미확인 판정)
-  - [요건 항목]: 충족/미충족/미확인 — 이력서 근거 또는 미충족 이유
-
-■ 우대 사항 항목별 해당 여부
-  (우대 사항의 각 항목을 나열하고 해당/비해당/미확인 판정)
-  - [우대 항목]: 해당/비해당/미확인 — 이력서 근거
-
-■ 합격 가능성 분석
-  - 이 지원자가 서류 통과할 가능성과 그 이유를 구체적으로 서술
-
-■ 담당자 면접 체크포인트
-  - 서류상 불확실하거나 검증이 필요한 항목 2~3가지 제시
-
-■ AI 작성 가능성
-  - 문체·표현 패턴·일관성 분석 결과: 높음/보통/낮음 + 근거 1~2줄`;
+응답 JSON:
+{
+  "grade": "하",
+  "gradeReason": "판정 이유 2~3문장",
+  "requirements": [
+${reqItems.map(r => `    { "item": "${r.replace(/"/g, "'")}", "met": false, "evidence": "이력서 근거 또는 미기재" }`).join(",\n")}
+  ],
+  "preferred": [
+${prefItems.map(r => `    { "item": "${r.replace(/"/g, "'")}", "met": false, "evidence": "근거 또는 비해당" }`).join(",\n")}
+  ],
+  "readiness": "입사 첫날 즉시 투입 가능 여부 및 필요 온보딩 서술",
+  "aiWritten": "낮음",
+  "aiWrittenReason": "문체 및 작성 패턴 분석 근거",
+  "interviewQuestions": ["질문1", "질문2", "질문3"]
+}`;
 
       let res;
       try {
@@ -651,15 +820,7 @@ function ResumeAI({ stageData, onUpdate, job }) {
       </Button>
 
       {stageData.aiAnalysis && (
-        <div style={{ background: "#EBF3FF", border: "1px solid #BFDBFE", borderRadius: 9, padding: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 12, fontWeight: 800, color: PR }}>🤖 분석 결과</span>
-            <span style={{ fontSize: 11, color: "#94A3B8" }}>{stageData.aiDate}</span>
-          </div>
-          <pre style={{ fontSize: 12.5, whiteSpace: "pre-wrap", margin: 0, lineHeight: 1.8, color: TEXT, fontFamily: "inherit" }}>
-            {stageData.aiAnalysis}
-          </pre>
-        </div>
+        <AnalysisResultCard raw={stageData.aiAnalysis} date={stageData.aiDate} />
       )}
     </div>
   );
@@ -1563,17 +1724,133 @@ function Dashboard({ jobs, cands, onCandClick }) {
 }
 
 // ── 공고 등록 모달 ─────────────────────────────────────────────────────────────
-function JobModal({ initial, onSave, onClose }) {
+function JobModal({ initial, onSave, onBulkSave, onClose }) {
   const [f, setF] = useState(
     initial || { title: "", jobType: "", department: "", requirements: "", preferredSkills: "", periodFrom: "", periodTo: "" }
   );
+  const [magicText, setMagicText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [suggestedJobs, setSuggestJobs] = useState([]);
+  const [checked, setChecked] = useState(new Set());
+
   const u = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  async function handleMagicImport() {
+    if (!magicText.trim()) { alert("공고 내용이나 URL의 텍스트를 입력해주세요."); return; }
+    setLoading(true);
+    setSuggestJobs([]);
+    setChecked(new Set());
+    const data = await aiParseInfo(magicText, "parse_job");
+
+    if (Array.isArray(data)) {
+      setSuggestJobs(data);
+      setChecked(new Set(data.map((_, i) => i)));
+    } else if (data) {
+      setF({ ...f, ...data });
+      alert("✨ 공고 정보를 자동으로 추출했습니다. 내용을 확인해주세요!");
+    } else {
+      alert("정보를 추출하지 못했습니다. 직접 입력해주세요.");
+    }
+    setLoading(false);
+  }
+
+  function selectJob(job) {
+    setF({ ...f, ...job });
+    setSuggestJobs([]);
+    setChecked(new Set());
+  }
+
+  function toggleCheck(i) {
+    setChecked(prev => {
+      const next = new Set(prev);
+      next.has(i) ? next.delete(i) : next.add(i);
+      return next;
+    });
+  }
+
+  function toggleAll() {
+    if (checked.size === suggestedJobs.length) setChecked(new Set());
+    else setChecked(new Set(suggestedJobs.map((_, i) => i)));
+  }
+
+  function handleBulkSave() {
+    const selected = suggestedJobs.filter((_, i) => checked.has(i));
+    if (selected.length === 0) { alert("등록할 직무를 선택해주세요."); return; }
+    onBulkSave(selected);
+  }
 
   return (
     <ModalWrap onClose={onClose}>
       <h3 style={{ margin: "0 0 20px", fontSize: 17, fontWeight: 800, color: TEXT }}>
         📋 채용 공고 {initial ? "수정" : "등록"}
       </h3>
+
+      {!initial && (
+        <div style={{ marginBottom: 24, padding: 14, background: "#F0F4FF", borderRadius: 10, border: `1.5px dashed ${PR}` }}>
+          <Lbl text="✨ 매직 임포트 (공고 자동 완성)" />
+          <p style={{ fontSize: 11, color: MUTED, margin: "4px 0 10px" }}>채용 사이트의 공고 내용을 복사해서 붙여넣으세요. AI가 정보를 채워줍니다.</p>
+          <textarea
+            value={magicText}
+            onChange={e => setMagicText(e.target.value)}
+            placeholder="사람인, 잡코리아 등의 공고 본문을 여기에 붙여넣으세요..."
+            rows={3}
+            style={{ ...baseInput, marginBottom: 8, background: "#fff" }}
+          />
+          <Button full sm disabled={loading} onClick={handleMagicImport}>
+            {loading ? "⏳ AI 분석 중..." : "🪄 정보 자동 추출하기"}
+          </Button>
+
+          {suggestedJobs.length > 0 && (
+            <div style={{ marginTop: 15, display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ fontSize: 12, fontWeight: 800, color: PR, margin: 0 }}>
+                  💡 감지된 포지션 ({suggestedJobs.length}개)
+                </p>
+                <span
+                  onClick={toggleAll}
+                  style={{ fontSize: 11, color: PR, cursor: "pointer", fontWeight: 700 }}
+                >
+                  {checked.size === suggestedJobs.length ? "전체 해제" : "전체 선택"}
+                </span>
+              </div>
+              {suggestedJobs.map((j, i) => (
+                <div
+                  key={i}
+                  onClick={() => toggleCheck(i)}
+                  style={{
+                    padding: "8px 12px", background: checked.has(i) ? "#EEF4FF" : "#fff",
+                    border: `1.5px solid ${checked.has(i) ? PR : BORDER}`,
+                    borderRadius: 8, cursor: "pointer", fontSize: 13,
+                    display: "flex", justifyContent: "space-between", alignItems: "center"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input type="checkbox" checked={checked.has(i)} onChange={() => toggleCheck(i)} onClick={e => e.stopPropagation()} />
+                    <b>{j.title}</b>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <span style={{ fontSize: 11, color: MUTED }}>{j.jobType}</span>
+                    <span
+                      style={{ fontSize: 11, color: PR, fontWeight: 700, padding: "2px 8px", background: "#fff", border: `1px solid ${PR}`, borderRadius: 5 }}
+                      onClick={e => { e.stopPropagation(); selectJob(j); }}
+                    >
+                      단독 입력
+                    </span>
+                  </div>
+                </div>
+              ))}
+              <Button
+                full
+                disabled={checked.size === 0}
+                onClick={handleBulkSave}
+              >
+                선택한 {checked.size}개 공고 일괄 등록
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <TextInput label="공고명" required value={f.title} onChange={v => u("title", v)} />
         <Grid2>
@@ -1654,6 +1931,115 @@ function CandModal({ jobs, preJobId, onSave, onClose }) {
   );
 }
 
+// ── 일괄 등록 컴포넌트 ──────────────────────────────────────────────────────────
+function BulkUploadZone({ jobId, job, onComplete }) {
+  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState("");
+  const [progress, setProgress] = useState({ cur: 0, total: 0 });
+
+  async function handleFiles(files) {
+    const pdfs = Array.from(files).filter(f => f.type === "application/pdf");
+    if (!pdfs.length) return;
+
+    setLoading(true);
+    setProgress({ cur: 0, total: pdfs.length });
+
+    const newCands = [];
+
+    for (let i = 0; i < pdfs.length; i++) {
+      const file = pdfs[i];
+      setStatus(`📄 [${i + 1}/${pdfs.length}] ${file.name} 처리 중...`);
+      setProgress(p => ({ ...p, cur: i + 1 }));
+
+      try {
+        // 1. 텍스트 추출
+        const text = await extractPdfText(file);
+        
+        // 2. 정보 파싱 (이름, 메일 등)
+        const info = await aiParseInfo(text, "parse_applicant");
+        
+        // 3. 적합도 분석 (기존 로직 재사용)
+        const prompt = `당신은 IT 기업의 경력 15년차 시니어 채용 전문가이자 냉철한 면접관입니다.
+[경력직 채용] 기준에 따라 자격 요건 충족 여부를 엄격히 분석하세요. 자격 요건 미달 시 무조건 "하" 판정입니다.
+
+[채용 공고]
+직무: ${job?.title}
+자격 요건: ${job?.requirements}
+우대 사항: ${job?.preferredSkills}
+
+아래 형식으로 작성하세요:
+■ 종합 적합도: 최상/상/중/하
+■ 자격 요건 충족 여부: ...
+■ AI 작성 가능성: ...`;
+
+        const res = await fetch(WORKER_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ prompt, resumeText: text }),
+        });
+        const analysis = await res.json();
+
+        // 4. 객체 생성
+        newCands.push({
+          id: (Date.now() + i).toString(),
+          jobId,
+          name: info?.name || file.name.replace(".pdf", ""),
+          phone: info?.phone || "",
+          email: info?.email || "",
+          currentStage: "docReview",
+          terminated: false,
+          stageData: {
+            application: { result: "완료", receivedDate: todayStr(), ts: nowStr() },
+            docReview: { 
+              aiAnalysis: analysis.text, 
+              aiDate: todayStr(), 
+              fileName: file.name,
+              hrComment: "일괄 자동 등록됨" 
+            }
+          }
+        });
+      } catch (err) {
+        console.error("Bulk Item Error:", err);
+      }
+    }
+
+    onComplete(newCands);
+    setLoading(false);
+    setStatus("");
+    alert(`${newCands.length}명의 지원자가 성공적으로 등록 및 분석되었습니다.`);
+  }
+
+  return (
+    <div
+      onDragOver={e => e.preventDefault()}
+      onDrop={e => { e.preventDefault(); handleFiles(e.dataTransfer.files); }}
+      style={{
+        background: "#F8FAFF", border: `2px dashed ${PR}`, borderRadius: 12,
+        padding: "24px", textAlign: "center", marginBottom: 20,
+        position: "relative", overflow: "hidden"
+      }}
+    >
+      {loading ? (
+        <div>
+          <div style={{ fontSize: 24, marginBottom: 10 }}>⚡</div>
+          <div style={{ fontWeight: 800, fontSize: 15, color: PR }}>{status}</div>
+          <div style={{ width: "100%", height: 6, background: "#E2E8F0", borderRadius: 3, marginTop: 15 }}>
+            <div style={{ width: `${(progress.cur / progress.total) * 100}%`, height: "100%", background: PR, borderRadius: 3, transition: "width .3s" }} />
+          </div>
+        </div>
+      ) : (
+        <div onClick={() => document.getElementById("bulkPdfInput").click()} style={{ cursor: "pointer" }}>
+          <input type="file" multiple accept=".pdf" id="bulkPdfInput" style={{ display: "none" }} onChange={e => handleFiles(e.target.files)} />
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📥</div>
+          <div style={{ fontWeight: 800, fontSize: 16, color: TEXT }}>지원자 PDF 이력서 일괄 투척</div>
+          <div style={{ fontSize: 12, color: MUTED, marginTop: 4 }}>여러 개의 PDF를 여기에 드래그하거나 클릭하여 선택하세요.</div>
+          <div style={{ fontSize: 11, color: PR, fontWeight: 700, marginTop: 8 }}>AI가 이름 추출 + 서류 분석까지 한 번에 끝냅니다!</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── 메인 앱 ───────────────────────────────────────────────────────────────────
 function App() {
   function loadLS(key) {
@@ -1682,6 +2068,14 @@ function App() {
     else setJobs(p => [...p, { ...form, id: Date.now().toString() }]);
     setShowJob(false);
     setEditJob(null);
+  }
+
+  function saveBulkJobs(forms) {
+    const now = Date.now();
+    setJobs(p => [...p, ...forms.map((form, i) => ({ ...form, id: (now + i).toString() }))]);
+    setShowJob(false);
+    setEditJob(null);
+    alert(`✅ ${forms.length}개의 공고가 등록되었습니다.`);
   }
 
   function saveCand(form) {
@@ -1913,8 +2307,15 @@ function App() {
                   {selJob.department}{selJob.periodFrom ? ` · ${selJob.periodFrom} ~ ${selJob.periodTo}` : ""}
                 </p>
               </div>
-              <Button onClick={() => openAddCand(selJob.id)}>+ 지원자 등록</Button>
+              <Button onClick={() => openAddCand(selJob.id)}>+ 지원자 개별 등록</Button>
             </div>
+
+            {/* 일괄 등록 존 추가 */}
+            <BulkUploadZone 
+              jobId={selJob.id} 
+              job={selJob} 
+              onComplete={(newList) => setCands(p => [...p, ...newList])} 
+            />
 
             {jobCands.length === 0 ? (
               <Card>
@@ -1956,7 +2357,7 @@ function App() {
       </div>
 
       {/* 모달 */}
-      {showJob  && <JobModal initial={editJob} onSave={saveJob} onClose={() => { setShowJob(false); setEditJob(null); }} />}
+      {showJob  && <JobModal initial={editJob} onSave={saveJob} onBulkSave={saveBulkJobs} onClose={() => { setShowJob(false); setEditJob(null); }} />}
       {showCand && <CandModal jobs={jobs} preJobId={preJobId} onSave={saveCand} onClose={() => { setShowCand(false); setPreJobId(null); }} />}
     </div>
   );
