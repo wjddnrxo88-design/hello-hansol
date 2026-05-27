@@ -40,21 +40,36 @@ export default {
             }
           } else {
             // 일반 웹페이지 HTML 파싱
-            const pageRes = await fetch(prompt, {
-              headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
-            });
-            if (pageRes.ok) {
-              let html = await pageRes.text();
-              html = html.replace(/<script[\s\S]*?<\/script>/gi, "")
-                         .replace(/<style[\s\S]*?<\/style>/gi, "")
-                         .replace(/<[^>]+>/g, " ")
-                         .replace(/\s+/g, " ")
-                         .substring(0, 10000);
-              prompt = html;
+            try {
+              const pageRes = await fetch(prompt, {
+                headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" }
+              });
+              if (pageRes.ok) {
+                let html = await pageRes.text();
+                html = html.replace(/<script[\s\S]*?<\/script>/gi, "")
+                           .replace(/<style[\s\S]*?<\/style>/gi, "")
+                           .replace(/<[^>]+>/g, " ")
+                           .replace(/\s+/g, " ")
+                           .substring(0, 10000);
+                if (html.trim().length < 200) {
+                  return new Response(JSON.stringify({ urlFetchFailed: true }), {
+                    headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ALLOWED_ORIGIN },
+                  });
+                }
+                prompt = html;
+              } else {
+                return new Response(JSON.stringify({ urlFetchFailed: true }), {
+                  headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ALLOWED_ORIGIN },
+                });
+              }
+            } catch (fetchErr) {
+              return new Response(JSON.stringify({ urlFetchFailed: true }), {
+                headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": ALLOWED_ORIGIN },
+              });
             }
           }
-        } catch (fetchErr) {
-          console.error("URL Fetch Failed:", fetchErr);
+        } catch (e) {
+          // 구글 시트 fetch 오류 무시
         }
       }
 

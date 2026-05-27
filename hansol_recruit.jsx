@@ -107,6 +107,7 @@ async function aiParseInfo(text, mode = "parse_applicant") {
       body: JSON.stringify({ prompt: text, mode }),
     });
     const json = await res.json();
+    if (json.urlFetchFailed) return { urlFetchFailed: true };
     // JSON 문자열만 추출 (배열 또는 객체 지원)
     const match = json.text.match(/\[[\s\S]*\]|\{[\s\S]*\}/);
     if (match) return JSON.parse(match[0]);
@@ -1742,7 +1743,9 @@ function JobModal({ initial, onSave, onBulkSave, onClose }) {
     setChecked(new Set());
     const data = await aiParseInfo(magicText, "parse_job");
 
-    if (Array.isArray(data)) {
+    if (data?.urlFetchFailed) {
+      alert("❌ URL에서 공고 내용을 가져오지 못했습니다.\n\n잡코리아, 사람인 등 채용 사이트는 외부 접근을 차단합니다.\n공고 페이지에서 텍스트를 직접 복사해서 붙여넣어 주세요.");
+    } else if (Array.isArray(data)) {
       setSuggestJobs(data);
       setChecked(new Set(data.map((_, i) => i)));
     } else if (data) {
@@ -1788,7 +1791,8 @@ function JobModal({ initial, onSave, onBulkSave, onClose }) {
       {!initial && (
         <div style={{ marginBottom: 24, padding: 14, background: "#F0F4FF", borderRadius: 10, border: `1.5px dashed ${PR}` }}>
           <Lbl text="✨ 매직 임포트 (공고 자동 완성)" />
-          <p style={{ fontSize: 11, color: MUTED, margin: "4px 0 10px" }}>채용 사이트의 공고 내용을 복사해서 붙여넣으세요. AI가 정보를 채워줍니다.</p>
+          <p style={{ fontSize: 11, color: MUTED, margin: "4px 0 6px" }}>채용 사이트의 공고 내용을 복사해서 붙여넣으세요. AI가 정보를 채워줍니다.</p>
+          <p style={{ fontSize: 11, color: "#e67e00", margin: "0 0 10px", background: "#fff8e6", padding: "5px 8px", borderRadius: 6 }}>⚠️ 잡코리아·사람인 등은 URL 직접 입력이 차단됩니다. 공고 페이지에서 텍스트를 복사해서 붙여넣으세요.</p>
           <textarea
             value={magicText}
             onChange={e => setMagicText(e.target.value)}
